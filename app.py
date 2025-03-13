@@ -129,7 +129,7 @@ def get_gdd():
     conn.close()
 
     plant_stage = get_growth_stage(total_gdd)
-    explanation_message = f"Since planting on {start_date}, the tree has accumulated {total_gdd:.2f} GDD, reaching the '{plant_stage}' stage."
+    explanation_message = f"Since planting on {start_date}, the tree has accumulated a total of {total_gdd:.2f} GDD, reaching the '{plant_stage}' stage."
 
     return jsonify({
         "location": location,
