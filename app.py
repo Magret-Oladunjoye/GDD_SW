@@ -3,7 +3,7 @@ from flask import Flask, request, jsonify, send_from_directory
 import requests
 from datetime import datetime, timedelta
 
-app = Flask(__name__, static_folder="frontend/my-react-app/build")
+app = Flask(__name__, static_folder="frontend/my-react-app/src/build", static_url_path="/")
 
 # OpenWeatherMap API Key (Replace with your own key)
 API_KEY = "8517c8118b2e0866ca72db95fa7a7148"
