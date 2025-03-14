@@ -58,11 +58,12 @@ def home():
 
 @app.route('/gdd-sw.onrender.com/', methods=['GET'])
 def get_gdd():
+    backend = request.args.get("backend", "gdd-sw.onrender.com")
     location = request.args.get("location", "Larnaca")
     base_temp = request.args.get("base_temp", 10)
     start_date = request.args.get("start_date")
 
-    print(f"Received request: location={location}, base_temp={base_temp}, start_date={start_date}")
+    print(f"Received request: backend={backend}, location={location}, base_temp={base_temp}, start_date={start_date}")
 
     # Validate base temperature
     try:
