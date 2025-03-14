@@ -1,9 +1,9 @@
 import sqlite3
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify
 import requests
 from datetime import datetime, timedelta
 
-app = Flask(__name__, static_folder="frontend/my-react-app/src/build", static_url_path="/")
+app = Flask(__name__)
 
 # OpenWeatherMap API Key (Replace with your own key)
 API_KEY = "8517c8118b2e0866ca72db95fa7a7148"
@@ -53,13 +53,13 @@ def get_growth_stage(total_gdd):
     return "Unknown Stage"
 
 @app.route("/")
-def serve_react():
-    return send_from_directory("frontend/build", "index.html")
+def home():
+    return "GDD Backend is running!"
 
 @app.route('/gdd', methods=['GET'])
 def get_gdd():
     location = request.args.get("location", "Larnaca")
-    base_temp = request.args.get("base_temp", 10)
+    base_temp = float(request.args.get("base_temp", 10))
     start_date = request.args.get("start_date")
 
     print(f"Received request: location={location}, base_temp={base_temp}, start_date={start_date}")
