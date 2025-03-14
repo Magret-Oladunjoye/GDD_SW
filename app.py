@@ -31,10 +31,10 @@ init_db()
 
 # Define Plant Growth Stages Based on GDD
 GROWTH_STAGES = [
-    (0, 100, "Bud devepment"),
-    (101, 350, "FLowering"),
+    (0, 100, "Bud Development"),
+    (101, 350, "Flowering"),
     (351, 700, "Fruit Set"),
-    (701, 1200, "Pit hardening"),
+    (701, 1200, "Pit Hardening"),
     (1201, 1800, "Oil Accumulation"),
     (1801, float("inf"), "Maturity & Harvest")
 ]
@@ -59,7 +59,7 @@ def home():
 @app.route('/gdd', methods=['GET'])
 def get_gdd():
     location = request.args.get("location", "Larnaca")
-    base_temp = float(request.args.get("base_temp", 10))
+    base_temp = request.args.get("base_temp", 10)
     start_date = request.args.get("start_date")
 
     print(f"Received request: location={location}, base_temp={base_temp}, start_date={start_date}")
@@ -79,7 +79,7 @@ def get_gdd():
     except ValueError:
         return jsonify({"error": "Invalid date format. Use YYYY-MM-DD."}), 400
 
-    # Convert location to lat/lon (for One Call API)
+    # Convert location to lat/lon (for OpenWeatherMap API)
     geocode_url = f"http://api.openweathermap.org/geo/1.0/direct?q={location}&limit=1&appid={API_KEY}"
     geo_response = requests.get(geocode_url).json()
     if not geo_response:
@@ -111,8 +111,14 @@ def get_gdd():
             continue
 
         try:
-            tmax = max(hour["temp"] for hour in data["data"])
-            tmin = min(hour["temp"] for hour in data["data"])
+            # Extract hourly temperatures
+            temperatures = [hour["temp"] for hour in data["data"]]
+            if not temperatures:
+                print(f"No temperature data available for {date_to_fetch.strftime('%Y-%m-%d')}")
+                continue
+
+            tmax = max(temperatures)
+            tmin = min(temperatures)
             gdd = calculate_gdd(tmax, tmin, base_temp)
             total_gdd += gdd
             daily_gdd_list.append({"date": date_to_fetch.strftime("%Y-%m-%d"), "gdd": gdd})
