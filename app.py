@@ -56,7 +56,7 @@ def get_growth_stage(total_gdd):
 def home():
     return "GDD Backend is running!"
 
-@app.route('/gdd', methods=['GET'])
+@app.route('/gdd-sw.onrender.com/', methods=['GET'])
 def get_gdd():
     location = request.args.get("location", "Larnaca")
     base_temp = request.args.get("base_temp", 10)
