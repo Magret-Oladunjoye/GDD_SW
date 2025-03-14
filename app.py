@@ -52,6 +52,10 @@ def get_growth_stage(total_gdd):
             return stage
     return "Unknown Stage"
 
+@app.route("/")
+def home():
+    return "GDD Backend is running!"
+
 @app.route('/gdd', methods=['GET'])
 def get_gdd():
     location = request.args.get("location", "Larnaca")
