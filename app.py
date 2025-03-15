@@ -157,8 +157,8 @@ def get_gdd():
 
     plant_stage = get_growth_stage(total_gdd)
     explanation_message = f"Since planting on {start_date}, the tree has accumulated a total of {total_gdd:.2f} GDD, reaching the '{plant_stage}' stage."
-    print(f"Raw API response for {date_to_fetch}: {data}")
-    print(f"Temperature readings for {date_to_fetch}: {temperatures}")
+    deb = f"Raw API response for {date_to_fetch}: {data}"
+    deb2 = f"Temperature readings for {date_to_fetch}: {temperatures}"
 
     return jsonify({
         "location": location,
@@ -168,8 +168,9 @@ def get_gdd():
         "growth_stage": plant_stage,
         "daily_gdd": daily_gdd_list,
         "message": explanation_message,
-        "temperature_debug": temp_data
-        
+        "temperature_debug": temp_data,
+        "debug": deb,
+        "debug2": deb2
     })
 
 if __name__ == '__main__':
