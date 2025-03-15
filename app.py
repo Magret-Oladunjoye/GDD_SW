@@ -121,15 +121,19 @@ def get_gdd():
             continue
 
         try:
-            temperatures = [hour["temp"] for hour in data["data"]]
+            # Extract temperatures correctly from hourly data
+            temperatures = [hour["temp"] for hour in data.get("data", [])]
+            print(f"Temperature readings for {date_to_fetch}: {temperatures}")
+
             if not temperatures:
+                print(f"No temperature data available for {date_to_fetch}")
                 continue
 
-            tmax = max(temperatures)
-            tmin = min(temperatures)
+            tmax = max(temperatures)  # Get max temperature for the day
+            tmin = min(temperatures)  # Get min temperature for the day
             gdd = calculate_gdd(tmax, tmin, base_temp)
 
-            # Store the new daily GDD
+            # Store daily GDD
             daily_gdd_list.append({"date": date_to_fetch.strftime("%Y-%m-%d"), "gdd": gdd})
             temp_data.append({"date": date_to_fetch.strftime("%Y-%m-%d"), "tmax": tmax, "tmin": tmin, "gdd": gdd})
 
@@ -147,6 +151,7 @@ def get_gdd():
         except Exception as e:
             print(f"Error processing {date_to_fetch}: {e}")
             continue
+
 
     conn.close()
 
