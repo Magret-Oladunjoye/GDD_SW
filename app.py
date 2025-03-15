@@ -2,8 +2,10 @@ import sqlite3
 from flask import Flask, request, jsonify
 import requests
 from datetime import datetime, timedelta
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 
 # OpenWeatherMap API Key (Replace with your own key)
 API_KEY = "8517c8118b2e0866ca72db95fa7a7148"
