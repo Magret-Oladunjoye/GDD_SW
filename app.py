@@ -168,8 +168,8 @@ def get_gdd():
         "growth_stage": plant_stage,
         "daily_gdd": daily_gdd_list,
         "message": explanation_message,
-        "temperature_debug": data
-
+        "temperature_debug": temp_data
+        
     })
 
 if __name__ == '__main__':
