@@ -44,8 +44,7 @@ GROWTH_STAGES = [
 # Function to calculate GDD
 def calculate_gdd(tmax, tmin, base_temp):
     avg_temp = (tmax + tmin) / 2
-    gdd = max(0, avg_temp - base_temp)  # Ensuring GDD is non-negative
-    return gdd
+    return max(0, avg_temp - base_temp)  # Ensuring GDD is non-negative
 
 # Function to determine plant growth stage
 def get_growth_stage(total_gdd):
@@ -92,10 +91,14 @@ def get_gdd():
     conn = sqlite3.connect("gdd_data.db")
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT SUM(daily_gdd) FROM gdd_records WHERE user_location=? AND planting_date=?
+        SELECT record_date, daily_gdd FROM gdd_records 
+        WHERE user_location=? AND planting_date=? ORDER BY record_date ASC
     """, (location, start_date))
-    row = cursor.fetchone()
-    total_gdd = row[0] if row and row[0] else 0
+
+    stored_gdd = {row[0]: row[1] for row in cursor.fetchall()}  # Dictionary of stored GDD values by date
+
+    # Reset total_gdd before summing only relevant values
+    total_gdd = sum(stored_gdd.values())
 
     daily_gdd_list = []
     temp_data = []  # Store raw temperatures for debugging
@@ -103,6 +106,11 @@ def get_gdd():
     for days_since in range((datetime.now().date() - start_date).days + 1):
         date_to_fetch = start_date + timedelta(days=days_since)
         timestamp = int(datetime.combine(date_to_fetch, datetime.min.time()).timestamp())
+
+        # Skip fetching if we already stored this date's GDD
+        if date_to_fetch.strftime("%Y-%m-%d") in stored_gdd:
+            print(f"Skipping stored GDD for {date_to_fetch}")
+            continue
 
         params = {"lat": lat, "lon": lon, "dt": timestamp, "appid": API_KEY, "units": "metric"}
         response = requests.get(ONECALL_URL, params=params)
@@ -113,29 +121,31 @@ def get_gdd():
             continue
 
         try:
-            # Extract hourly temperatures
             temperatures = [hour["temp"] for hour in data["data"]]
             if not temperatures:
-                print(f"No temperature data available for {date_to_fetch.strftime('%Y-%m-%d')}")
                 continue
 
             tmax = max(temperatures)
             tmin = min(temperatures)
             gdd = calculate_gdd(tmax, tmin, base_temp)
-            total_gdd += gdd
+
+            # Store the new daily GDD
             daily_gdd_list.append({"date": date_to_fetch.strftime("%Y-%m-%d"), "gdd": gdd})
             temp_data.append({"date": date_to_fetch.strftime("%Y-%m-%d"), "tmax": tmax, "tmin": tmin, "gdd": gdd})
 
-            # Store the GDD record in the database
+            # Update cumulative GDD correctly (avoid duplication)
+            total_gdd += gdd  
+
             cursor.execute("""
                 INSERT INTO gdd_records (user_location, planting_date, base_temperature, record_date, daily_gdd, cumulative_gdd)
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (location, start_date, base_temp, date_to_fetch, gdd, total_gdd))
             conn.commit()
 
-            print(f"{date_to_fetch.strftime('%Y-%m-%d')}: Tmax={tmax}, Tmin={tmin}, GDD={gdd}")
+            print(f"{date_to_fetch}: Tmax={tmax}, Tmin={tmin}, GDD={gdd}, Cumulative GDD={total_gdd}")
+
         except Exception as e:
-            print(f"Error processing {date_to_fetch.strftime('%Y-%m-%d')}: {e}")
+            print(f"Error processing {date_to_fetch}: {e}")
             continue
 
     conn.close()
