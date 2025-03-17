@@ -43,6 +43,7 @@ GROWTH_STAGES = [
     (1201, 1800, "Oil Accumulation"),
     (1801, float("inf"), "Maturity & Harvest")
 ]
+
 @app.route("/")
 def home():
     return "GDD Backend is running!"
@@ -61,8 +62,9 @@ def get_lat_lon_from_location(location):
         data = response.json()
         if data.get("totalResultsCount", 0) > 0:
             lat, lon = data["geonames"][0]["lat"], data["geonames"][0]["lng"]
-            return lat, lon
+            return float(lat), float(lon)  # to ensure they are floats
     return None, None
+
 
 # Function to find the nearest NCEI station
 def get_nearest_ncei_station(lat, lon):
