@@ -42,10 +42,49 @@ GROWTH_STAGES = [
     (1801, float("inf"), "Maturity & Harvest")
 ]
 
-# Function to calculate GDD
-def calculate_gdd(tmax, tmin, base_temp):
-    avg_temp = (tmax + tmin) / 2
-    return max(0, avg_temp - base_temp)
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+
+@app.route("/calculate_gdd", methods=["GET"])
+def calculate_gdd_endpoint():
+    location = request.args.get("location")
+    start_date = request.args.get("start_date")
+    end_date = request.args.get("end_date")
+    base_temp = request.args.get("base_temp", "10")
+
+    logging.debug(f"Received request: location={location}, start_date={start_date}, end_date={end_date}, base_temp={base_temp}")
+
+    lat, lon = get_lat_lon_from_location(location)
+    logging.debug(f"GeoNames API Response: lat={lat}, lon={lon}")
+
+    if lat is None or lon is None:
+        return jsonify({"error": "Invalid location or GeoNames API issue"}), 400
+
+    station_id = get_nearest_ncei_station(lat, lon)
+    logging.debug(f"NCEI Station Found: {station_id}")
+
+    if station_id is None:
+        return jsonify({"error": "No nearby NCEI station found"}), 400
+
+    tmin, tmax = get_ncei_temperature(station_id, start_date, end_date)
+    logging.debug(f"NCEI Temperature Data: tmin={tmin}, tmax={tmax}")
+
+    if tmin is None or tmax is None:
+        return jsonify({"error": "Could not fetch temperature data from NCEI"}), 400
+
+    gdd = calculate_gdd(tmax, tmin, base_temp)
+    logging.debug(f"Calculated GDD: {gdd}")
+
+    return jsonify({
+        "location": location,
+        "station_id": station_id,
+        "start_date": start_date,
+        "end_date": end_date,
+        "base_temperature": base_temp,
+        "GDD": gdd
+    })
+
 
 # Function to get latitude and longitude from city name
 def get_lat_lon_from_location(location):
@@ -121,7 +160,7 @@ def calculate_gdd_endpoint():
     
     tmin, tmax = get_ncei_temperature(station_id, start_date, end_date)
     if tmin is not None and tmax is not None:
-        gdd = calculate_gdd(tmax, tmin, base_temp)
+        gdd = calculate_gdd_endpoint(tmax, tmin, base_temp)
         return jsonify({
             "location": location,
             "station_id": station_id,
