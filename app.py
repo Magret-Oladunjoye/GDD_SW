@@ -65,17 +65,22 @@ def get_lat_lon_from_location(location):
             return float(lat), float(lon)  # to ensure they are floats
     return None, None
 
+lat, lon = get_lat_lon_from_location("paris")
+print(lat, lon)
+
 
 # Function to find the nearest NCEI station
 def get_nearest_ncei_station(lat, lon):
-    params = {"bbox": f"{lat+1},{lon-1},{lat-1},{lon+1}", "dataset": "daily-summaries", "format": "json"}
+    params = {"bbox": f"{lat+2},{lon-2},{lat-2},{lon+2}", "dataset": "daily-summaries", "format": "json"}
     response = requests.get(NCEI_STATION_SEARCH_URL, params=params)
     
     if response.status_code == 200:
         data = response.json()
+        print("NCEI Station List:", data)  # 🔍 Debugging Line
         if "stations" in data and len(data["stations"]) > 0:
             return data["stations"][0]["id"]
     return None
+
 
 # Function to fetch temperature data from NCEI
 def get_ncei_temperature(station_id, start_date, end_date):
