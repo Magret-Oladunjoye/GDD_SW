@@ -68,7 +68,7 @@ def get_lat_lon_from_location(location):
 
 # Function to find the nearest NCEI station
 def get_nearest_ncei_station(lat, lon):
-    params = {"bbox": f"{lat-1},{lon-1},{lat+1},{lon+1}", "dataset": "daily-summaries", "format": "json"}
+    params = {"bbox": f"{lat+1},{lon-1},{lat-1},{lon+1}", "dataset": "daily-summaries", "format": "json"}
     response = requests.get(NCEI_STATION_SEARCH_URL, params=params)
     
     if response.status_code == 200:
