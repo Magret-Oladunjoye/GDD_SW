@@ -43,6 +43,9 @@ GROWTH_STAGES = [
     (1201, 1800, "Oil Accumulation"),
     (1801, float("inf"), "Maturity & Harvest")
 ]
+@app.route("/")
+def home():
+    return "GDD Backend is running!"
 
 # Function to calculate GDD
 def calculate_gdd(tmax, tmin, base_temp):
