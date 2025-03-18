@@ -158,7 +158,7 @@ def get_gdd():
         "temperature_debug": temp_data
     })
 
-    @app.route('/test_weather', methods=['GET'])
+@app.route('/test_weather', methods=['GET'])
 def test_weather():
     """Manually test weather data retrieval for debugging."""
     location = request.args.get("location", "Larnaca")
