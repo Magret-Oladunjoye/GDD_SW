@@ -1,4 +1,5 @@
 # Description: Backend server for calculating Growing Degree Days (GDD) based on historical weather data.
+import json
 import sqlite3
 from flask import Flask, request, jsonify, make_response
 import requests
@@ -162,7 +163,7 @@ def get_gdd():
 def test_weather():
     """Manually test weather data retrieval for debugging."""
     location = request.args.get("location", "Larnaca")
-    lat, lon = get_lat_lon(location)
+    lat, lon = get_lat_lon_from_location(location)
     if lat is None or lon is None:
         return jsonify({"error": "Invalid location"}), 400
 
