@@ -11,7 +11,7 @@ app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})  # Allow all origins temporarily
 
 # OpenWeatherMap API Key (Replace with your own key)
-API_KEY = "f30da0a8a1253f935e36eb363837df99"
+API_KEY = "d430decf8af0dba498b77d7772b7ea49"
 HISTORY_API_URL = "https://history.openweathermap.org/data/2.5/history/city"
 
 # Initialize logging
