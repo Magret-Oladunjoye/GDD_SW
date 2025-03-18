@@ -78,8 +78,6 @@ def get_gdd():
     base_temp = float(request.args.get("base_temp", 10))
     start_date = request.args.get("start_date")
 
-    logging.debug(f"Received request: location={location}, base_temp={base_temp}, start_date={start_date}")
-
     # Validate inputs
     if not start_date:
         return jsonify({"error": "Please specify a planting start date in YYYY-MM-DD format."}), 400
@@ -100,35 +98,24 @@ def get_gdd():
 
     for days_since in range((datetime.now().date() - start_date).days + 1):
         date_to_fetch = start_date + timedelta(days=days_since)
-        timestamp = int(datetime.combine(date_to_fetch, datetime.min.time()).timestamp()) - (3600 * 12)
+        timestamp = int(datetime.combine(date_to_fetch, datetime.min.time()).timestamp())
 
         # Fetch historical weather data from OpenWeatherMap
         params = {"lat": lat, "lon": lon, "dt": timestamp, "appid": API_KEY, "units": "metric"}
         response = requests.get(ONECALL_URL, params=params)
         data = response.json()
 
-        # Debugging: Log full API response
-        logging.debug(f"Raw API response for {date_to_fetch.strftime('%Y-%m-%d')}: {data}")
-
         if response.status_code != 200 or "data" not in data:
             logging.warning(f"No data for {date_to_fetch.strftime('%Y-%m-%d')}")
             continue
 
         try:
-            # Extract morning and afternoon temperatures
-            morning_temp = None
-            afternoon_temp = None
+            # Extract morning (6 AM - 8 AM) and afternoon (2 PM - 4 PM) temperatures
+            morning_temp = next((hour["temp"] for hour in data["data"] if 6 <= datetime.utcfromtimestamp(hour["dt"]).hour <= 8), None)
+            afternoon_temp = next((hour["temp"] for hour in data["data"] if 14 <= datetime.utcfromtimestamp(hour["dt"]).hour <= 16), None)
 
-            for hour in data.get("data", []):
-                hour_time = datetime.utcfromtimestamp(hour["dt"]).hour
-                if 5 <= hour_time <= 7:
-                    morning_temp = hour["temp"]
-                if 14 <= hour_time <= 16:
-                    afternoon_temp = hour["temp"]
-
-            # Ensure we have both Tmin and Tmax values
             if morning_temp is None or afternoon_temp is None:
-                logging.warning(f"❌ No valid temperature readings for {date_to_fetch.strftime('%Y-%m-%d')}")
+                logging.warning(f"Skipping {date_to_fetch.strftime('%Y-%m-%d')} due to missing temperature values.")
                 continue
 
             tmin = morning_temp
@@ -137,7 +124,7 @@ def get_gdd():
             total_gdd += gdd
 
             daily_gdd_list.append({"date": date_to_fetch.strftime("%Y-%m-%d"), "gdd": gdd})
-            temp_data.append({"date": date_to_fetch.strftime("%Y-%m-%d"), "tmin": tmin, "tmax": tmax, "gdd": gdd})
+            temp_data.append({"date": date_to_fetch.strftime("%Y-%m-%d"), "morning_temp": tmin, "afternoon_temp": tmax, "gdd": gdd})
 
             logging.info(f"{date_to_fetch.strftime('%Y-%m-%d')}: Tmin={tmin}, Tmax={tmax}, GDD={gdd}")
 
@@ -145,17 +132,12 @@ def get_gdd():
             logging.error(f"Error processing {date_to_fetch.strftime('%Y-%m-%d')}: {e}")
             continue
 
-    plant_stage = get_growth_stage(total_gdd)
-    explanation_message = f"Since planting on {start_date}, the tree has accumulated {total_gdd:.2f} GDD, reaching the '{plant_stage}' stage."
-
     return jsonify({
         "location": location,
         "latitude": lat,
         "longitude": lon,
         "total_gdd": total_gdd,
-        "growth_stage": plant_stage,
         "daily_gdd": daily_gdd_list,
-        "message": explanation_message,
         "temperature_debug": temp_data
     })
 
