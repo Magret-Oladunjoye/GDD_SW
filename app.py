@@ -158,6 +158,27 @@ def get_gdd():
         "temperature_debug": temp_data
     })
 
+    @app.route('/test_weather', methods=['GET'])
+def test_weather():
+    """Manually test weather data retrieval for debugging."""
+    location = request.args.get("location", "Larnaca")
+    lat, lon = get_lat_lon(location)
+    if lat is None or lon is None:
+        return jsonify({"error": "Invalid location"}), 400
+
+    # Use today's date minus 1 day (yesterday) for historical weather
+    date_to_fetch = datetime.now() - timedelta(days=1)
+    timestamp = int(date_to_fetch.timestamp())
+
+    params = {"lat": lat, "lon": lon, "dt": timestamp, "appid": API_KEY, "units": "metric"}
+    response = requests.get(ONECALL_URL, params=params)
+    data = response.json()
+
+    # Log response for debugging
+    print(json.dumps(data, indent=4))  # Print in readable JSON format
+
+    return jsonify(data)  # Return full response for manual verification
+
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=5000)
 
