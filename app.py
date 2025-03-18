@@ -1,15 +1,20 @@
+# Description: Backend server for calculating Growing Degree Days (GDD) based on historical weather data.
 import sqlite3
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 import requests
 from flask_cors import CORS
 from datetime import datetime, timedelta
+import logging
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}})  # Allow all origins temporarily
 
-# OpenWeatherMap API Key
+# OpenWeatherMap API Key (Replace with your own key)
 API_KEY = "8517c8118b2e0866ca72db95fa7a7148"
 ONECALL_URL = "https://api.openweathermap.org/data/3.0/onecall/timemachine"
+
+# Initialize logging
+logging.basicConfig(level=logging.DEBUG)
 
 # Initialize SQLite database
 def init_db():
@@ -31,40 +36,57 @@ def init_db():
 
 init_db()
 
+# Define Plant Growth Stages Based on GDD
+GROWTH_STAGES = [
+    (0, 100, "Bud Development"),
+    (101, 350, "Flowering"),
+    (351, 700, "Fruit Set"),
+    (701, 1200, "Pit Hardening"),
+    (1201, 1800, "Oil Accumulation"),
+    (1801, float("inf"), "Maturity & Harvest")
+]
+
 # Function to calculate GDD
 def calculate_gdd(tmax, tmin, base_temp):
     avg_temp = (tmax + tmin) / 2
-    return max(0, avg_temp - base_temp)
+    return max(0, avg_temp - base_temp)  # Ensuring GDD is non-negative
+
+# Function to determine plant growth stage
+def get_growth_stage(total_gdd):
+    for lower, upper, stage in GROWTH_STAGES:
+        if lower <= total_gdd <= upper:
+            return stage
+    return "Unknown Stage"
 
 # Function to get latitude and longitude from city name
 def get_lat_lon_from_location(location):
     geocode_url = f"http://api.openweathermap.org/geo/1.0/direct?q={location}&limit=1&appid={API_KEY}"
     response = requests.get(geocode_url).json()
     
-    if response and isinstance(response, list) and len(response) > 0:
+    if response:
         return response[0]["lat"], response[0]["lon"]
-    
     return None, None
 
 @app.route("/")
 def home():
-    return "GDD API is running!", 200
+    return "GDD Backend is running!"
 
 @app.route('/gdd', methods=['GET'])
 def get_gdd():
     location = request.args.get("location", "Larnaca")
-    base_temp = request.args.get("base_temp", 10)
+    base_temp = float(request.args.get("base_temp", 10))
     start_date = request.args.get("start_date")
+
+    logging.debug(f"Received request: location={location}, base_temp={base_temp}, start_date={start_date}")
 
     # Validate inputs
     if not start_date:
         return jsonify({"error": "Please specify a planting start date in YYYY-MM-DD format."}), 400
 
     try:
-        base_temp = float(base_temp)
         start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
     except ValueError:
-        return jsonify({"error": "Invalid input values."}), 400
+        return jsonify({"error": "Invalid date format. Use YYYY-MM-DD."}), 400
 
     # Convert location to lat/lon
     lat, lon = get_lat_lon_from_location(location)
@@ -77,29 +99,35 @@ def get_gdd():
 
     for days_since in range((datetime.now().date() - start_date).days + 1):
         date_to_fetch = start_date + timedelta(days=days_since)
-        timestamp = int(datetime.combine(date_to_fetch, datetime.min.time()).timestamp())
+        timestamp = int(datetime.combine(date_to_fetch, datetime.min.time()).timestamp()) - (3600 * 12)
 
         # Fetch historical weather data from OpenWeatherMap
         params = {"lat": lat, "lon": lon, "dt": timestamp, "appid": API_KEY, "units": "metric"}
         response = requests.get(ONECALL_URL, params=params)
+        data = response.json()
 
-        if response.status_code != 200:
-            print(f"No data for {date_to_fetch.strftime('%Y-%m-%d')}")
+        # Debugging: Log full API response
+        logging.debug(f"Raw API response for {date_to_fetch.strftime('%Y-%m-%d')}: {data}")
+
+        if response.status_code != 200 or "data" not in data:
+            logging.warning(f"No data for {date_to_fetch.strftime('%Y-%m-%d')}")
             continue
 
         try:
-            data = response.json()
+            # Extract morning and afternoon temperatures
+            morning_temp = None
+            afternoon_temp = None
 
-            if "data" not in data or not isinstance(data["data"], list):
-                print(f"Skipping {date_to_fetch.strftime('%Y-%m-%d')} due to missing temperature data.")
-                continue
+            for hour in data.get("data", []):
+                hour_time = datetime.utcfromtimestamp(hour["dt"]).hour
+                if 5 <= hour_time <= 7:
+                    morning_temp = hour["temp"]
+                if 14 <= hour_time <= 16:
+                    afternoon_temp = hour["temp"]
 
-            # Extract temperatures at 6 AM and 3 PM
-            morning_temp = next((hour["temp"] for hour in data["data"] if 5 <= datetime.utcfromtimestamp(hour["dt"]).hour <= 7), None)
-            afternoon_temp = next((hour["temp"] for hour in data["data"] if 14 <= datetime.utcfromtimestamp(hour["dt"]).hour <= 16), None)
-
+            # Ensure we have both Tmin and Tmax values
             if morning_temp is None or afternoon_temp is None:
-                print(f"Skipping {date_to_fetch.strftime('%Y-%m-%d')} due to missing morning or afternoon temperatures.")
+                logging.warning(f"❌ No valid temperature readings for {date_to_fetch.strftime('%Y-%m-%d')}")
                 continue
 
             tmin = morning_temp
@@ -110,20 +138,26 @@ def get_gdd():
             daily_gdd_list.append({"date": date_to_fetch.strftime("%Y-%m-%d"), "gdd": gdd})
             temp_data.append({"date": date_to_fetch.strftime("%Y-%m-%d"), "tmin": tmin, "tmax": tmax, "gdd": gdd})
 
-            print(f"{date_to_fetch.strftime('%Y-%m-%d')}: Tmin={tmin}, Tmax={tmax}, GDD={gdd}")
+            logging.info(f"{date_to_fetch.strftime('%Y-%m-%d')}: Tmin={tmin}, Tmax={tmax}, GDD={gdd}")
 
         except Exception as e:
-            print(f"Error processing {date_to_fetch.strftime('%Y-%m-%d')}: {e}")
+            logging.error(f"Error processing {date_to_fetch.strftime('%Y-%m-%d')}: {e}")
             continue
+
+    plant_stage = get_growth_stage(total_gdd)
+    explanation_message = f"Since planting on {start_date}, the tree has accumulated {total_gdd:.2f} GDD, reaching the '{plant_stage}' stage."
 
     return jsonify({
         "location": location,
         "latitude": lat,
         "longitude": lon,
         "total_gdd": total_gdd,
+        "growth_stage": plant_stage,
         "daily_gdd": daily_gdd_list,
+        "message": explanation_message,
         "temperature_debug": temp_data
     })
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=5000)
+
