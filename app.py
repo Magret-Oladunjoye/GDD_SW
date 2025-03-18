@@ -117,11 +117,15 @@ def get_gdd():
             print(f"Error processing {date_to_fetch.strftime('%Y-%m-%d')}: {e}")
             continue
 
+    # 🔥 Fix: Determine Growth Stage
+    growth_stage = get_growth_stage(total_gdd)
+
     return jsonify({
         "location": location,
         "latitude": lat,
         "longitude": lon,
         "total_gdd": total_gdd,
+        "growth_stage": growth_stage,  # ✅ Added this field
         "daily_gdd": daily_gdd_list,
         "temperature_debug": temp_data
     })
