@@ -46,6 +46,10 @@ def get_lat_lon_from_location(location):
     
     return None, None
 
+@app.route("/")
+def home():
+    return "GDD API is running!", 200
+
 @app.route('/gdd', methods=['GET'])
 def get_gdd():
     location = request.args.get("location", "Larnaca")
