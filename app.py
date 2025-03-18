@@ -2,17 +2,14 @@ import sqlite3
 from flask import Flask, request, jsonify
 import requests
 from flask_cors import CORS
-import logging
-
+from datetime import datetime, timedelta
 
 app = Flask(__name__)
 CORS(app)
 
-# API URLs
-NCEI_API_URL = "https://www.ncei.noaa.gov/access/services/data/v1"
-NCEI_STATION_SEARCH_URL = "https://www.ncei.noaa.gov/access/services/search/v1/stations"
-GEONAMES_API_URL = "http://api.geonames.org/searchJSON"
-GEONAMES_USERNAME = "magretolad"
+# OpenWeatherMap API Key
+API_KEY = "8517c8118b2e0866ca72db95fa7a7148"
+ONECALL_URL = "https://api.openweathermap.org/data/3.0/onecall/timemachine"
 
 # Initialize SQLite database
 def init_db():
@@ -34,20 +31,6 @@ def init_db():
 
 init_db()
 
-# Growth stages
-GROWTH_STAGES = [
-    (0, 100, "Bud Development"),
-    (101, 350, "Flowering"),
-    (351, 700, "Fruit Set"),
-    (701, 1200, "Pit Hardening"),
-    (1201, 1800, "Oil Accumulation"),
-    (1801, float("inf"), "Maturity & Harvest")
-]
-
-@app.route("/")
-def home():
-    return "GDD Backend is running!"
-
 # Function to calculate GDD
 def calculate_gdd(tmax, tmin, base_temp):
     avg_temp = (tmax + tmin) / 2
@@ -55,100 +38,88 @@ def calculate_gdd(tmax, tmin, base_temp):
 
 # Function to get latitude and longitude from city name
 def get_lat_lon_from_location(location):
-    params = {"q": location, "maxRows": 1, "username": GEONAMES_USERNAME}
-    response = requests.get(GEONAMES_API_URL, params=params)
+    geocode_url = f"http://api.openweathermap.org/geo/1.0/direct?q={location}&limit=1&appid={API_KEY}"
+    response = requests.get(geocode_url).json()
     
-    if response.status_code == 200:
-        data = response.json()
-        if data.get("totalResultsCount", 0) > 0:
-            lat, lon = data["geonames"][0]["lat"], data["geonames"][0]["lng"]
-            return float(lat), float(lon)  # to ensure they are floats
+    if response and isinstance(response, list) and len(response) > 0:
+        return response[0]["lat"], response[0]["lon"]
+    
     return None, None
 
-lat, lon = get_lat_lon_from_location("paris")
-print(lat, lon)
-
-
-# Function to find the nearest NCEI station
-def get_nearest_ncei_station(lat, lon):
-    params = {"bbox": f"{lat+2},{lon-2},{lat-2},{lon+2}", "dataset": "daily-summaries", "format": "json"}
-    response = requests.get(NCEI_STATION_SEARCH_URL, params=params)
-    
-    if response.status_code == 200:
-        data = response.json()
-        print("NCEI Station List:", data)  # 🔍 Debugging Line
-        if "stations" in data and len(data["stations"]) > 0:
-            return data["stations"][0]["id"]
-    return None
-
-
-# Function to fetch temperature data from NCEI
-def get_ncei_temperature(station_id, start_date, end_date):
-    params = {
-        "dataset": "daily-summaries",
-        "dataTypes": "TMAX,TMIN",
-        "stations": station_id,
-        "startDate": start_date,
-        "endDate": end_date,
-        "units": "metric",
-        "includeAttributes": "false",
-        "format": "json"
-    }
-    response = requests.get(NCEI_API_URL, params=params)
-    
-    if response.status_code == 200:
-        data = response.json()
-        tmin_values = [entry.get("TMIN") for entry in data if "TMIN" in entry]
-        tmax_values = [entry.get("TMAX") for entry in data if "TMAX" in entry]
-        
-        if tmin_values and tmax_values:
-            avg_tmin = sum(tmin_values) / len(tmin_values)
-            avg_tmax = sum(tmax_values) / len(tmax_values)
-            return avg_tmin, avg_tmax
-    return None, None
-
-logging.basicConfig(level=logging.DEBUG)
-
-@app.route("/calculate_gdd", methods=["GET"])
-def calculate_gdd_endpoint():
-    location = request.args.get("location")
+@app.route('/gdd', methods=['GET'])
+def get_gdd():
+    location = request.args.get("location", "Larnaca")
+    base_temp = request.args.get("base_temp", 10)
     start_date = request.args.get("start_date")
-    end_date = request.args.get("end_date")
-    base_temp = request.args.get("base_temp", "10")
 
-    logging.debug(f"Received request: location={location}, start_date={start_date}, end_date={end_date}, base_temp={base_temp}")
+    # Validate inputs
+    if not start_date:
+        return jsonify({"error": "Please specify a planting start date in YYYY-MM-DD format."}), 400
 
+    try:
+        base_temp = float(base_temp)
+        start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+    except ValueError:
+        return jsonify({"error": "Invalid input values."}), 400
+
+    # Convert location to lat/lon
     lat, lon = get_lat_lon_from_location(location)
-    logging.debug(f"GeoNames API Response: lat={lat}, lon={lon}")
-
     if lat is None or lon is None:
-        return jsonify({"error": "Invalid location or GeoNames API issue"}), 400
+        return jsonify({"error": "Invalid location"}), 400
 
-    station_id = get_nearest_ncei_station(lat, lon)
-    logging.debug(f"NCEI Station Found: {station_id}")
+    total_gdd = 0
+    daily_gdd_list = []
+    temp_data = []
 
-    if station_id is None:
-        return jsonify({"error": "No nearby NCEI station found"}), 400
+    for days_since in range((datetime.now().date() - start_date).days + 1):
+        date_to_fetch = start_date + timedelta(days=days_since)
+        timestamp = int(datetime.combine(date_to_fetch, datetime.min.time()).timestamp())
 
-    tmin, tmax = get_ncei_temperature(station_id, start_date, end_date)
-    logging.debug(f"NCEI Temperature Data: tmin={tmin}, tmax={tmax}")
+        # Fetch historical weather data from OpenWeatherMap
+        params = {"lat": lat, "lon": lon, "dt": timestamp, "appid": API_KEY, "units": "metric"}
+        response = requests.get(ONECALL_URL, params=params)
 
-    if tmin is None or tmax is None:
-        return jsonify({"error": "Could not fetch temperature data from NCEI"}), 400
+        if response.status_code != 200:
+            print(f"No data for {date_to_fetch.strftime('%Y-%m-%d')}")
+            continue
 
-    gdd = calculate_gdd(tmax, tmin, base_temp)
-    logging.debug(f"Calculated GDD: {gdd}")
+        try:
+            data = response.json()
+
+            if "data" not in data or not isinstance(data["data"], list):
+                print(f"Skipping {date_to_fetch.strftime('%Y-%m-%d')} due to missing temperature data.")
+                continue
+
+            # Extract temperatures at 6 AM and 3 PM
+            morning_temp = next((hour["temp"] for hour in data["data"] if 5 <= datetime.utcfromtimestamp(hour["dt"]).hour <= 7), None)
+            afternoon_temp = next((hour["temp"] for hour in data["data"] if 14 <= datetime.utcfromtimestamp(hour["dt"]).hour <= 16), None)
+
+            if morning_temp is None or afternoon_temp is None:
+                print(f"Skipping {date_to_fetch.strftime('%Y-%m-%d')} due to missing morning or afternoon temperatures.")
+                continue
+
+            tmin = morning_temp
+            tmax = afternoon_temp
+            gdd = calculate_gdd(tmax, tmin, base_temp)
+            total_gdd += gdd
+
+            daily_gdd_list.append({"date": date_to_fetch.strftime("%Y-%m-%d"), "gdd": gdd})
+            temp_data.append({"date": date_to_fetch.strftime("%Y-%m-%d"), "tmin": tmin, "tmax": tmax, "gdd": gdd})
+
+            print(f"{date_to_fetch.strftime('%Y-%m-%d')}: Tmin={tmin}, Tmax={tmax}, GDD={gdd}")
+
+        except Exception as e:
+            print(f"Error processing {date_to_fetch.strftime('%Y-%m-%d')}: {e}")
+            continue
 
     return jsonify({
         "location": location,
-        "station_id": station_id,
-        "start_date": start_date,
-        "end_date": end_date,
-        "base_temperature": base_temp,
-        "GDD": gdd
+        "latitude": lat,
+        "longitude": lon,
+        "total_gdd": total_gdd,
+        "daily_gdd": daily_gdd_list,
+        "temperature_debug": temp_data
     })
 
-
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     app.run(host="0.0.0.0", port=5000)
